@@ -393,22 +393,42 @@ function buildEscalation(data) {
         !r['Estimated Host Site Prep Completion Date']
     );
     
-    // Unresponsive: host comments contain "unresponsive"
-    const unresponsive = data.filter(r => 
+    // Potential Attrition: host comments contain "unresponsive"
+    const attrition = data.filter(r => 
         (r['Site verif: Host comments'] || '').toLowerCase().includes('unresponsive')
     );
     
-    let html = `<div class="tabs">`;
+    // Store data globally for filtering
+    window._escalationData = { overdue, noEtaLob, attrition };
+    
+    let html = `<p style="font-size:0.85rem;color:#666;margin-bottom:12px;font-style:italic;">Potential Attrition: Locations flagged with unresponsive hosts for more than a month.</p>`;
+    html += `<div class="tabs">`;
     html += `<button class="tab-btn active" onclick="switchTab(event, 'tabOverdue')">Overdue (${overdue.length})</button>`;
     html += `<button class="tab-btn" onclick="switchTab(event, 'tabNoEta')">No ETA (${noEtaLob.length})</button>`;
-    html += `<button class="tab-btn" onclick="switchTab(event, 'tabUnresponsive')">Unresponsive (${unresponsive.length})</button>`;
+    html += `<button class="tab-btn" onclick="switchTab(event, 'tabAttrition')">Potential Attrition (${attrition.length})</button>`;
     html += `</div>`;
     
-    html += `<div class="tab-content active" id="tabOverdue">${buildEscalationTable(overdue)}</div>`;
-    html += `<div class="tab-content" id="tabNoEta">${buildEscalationTable(noEtaLob)}</div>`;
-    html += `<div class="tab-content" id="tabUnresponsive">${buildEscalationTable(unresponsive)}</div>`;
+    html += `<div class="tab-content active" id="tabOverdue">${buildEscalationTab(overdue, 'overdue')}</div>`;
+    html += `<div class="tab-content" id="tabNoEta">${buildEscalationTab(noEtaLob, 'noEtaLob')}</div>`;
+    html += `<div class="tab-content" id="tabAttrition">${buildEscalationTab(attrition, 'attrition')}</div>`;
     
     document.getElementById('escalationContent').innerHTML = html;
+}
+
+function buildEscalationTab(rows, dataKey) {
+    if (rows.length === 0) return '<p style="padding:15px;color:#666;">No cases found.</p>';
+    
+    // Get unique owners for filter
+    const owners = [...new Set(rows.map(r => r['Opportunity Owner'] || 'Unknown'))].sort();
+    
+    let html = `<div style="margin:10px 0;">`;
+    html += `<label style="font-size:0.85rem;font-weight:600;margin-right:8px;">Filter by Owner:</label>`;
+    html += `<select onchange="filterEscalation(this.value, '${dataKey}')" style="padding:5px 10px;border-radius:4px;border:1px solid #ddd;font-size:0.85rem;">`;
+    html += `<option value="All">All Owners</option>`;
+    owners.forEach(o => { html += `<option value="${o}">${o}</option>`; });
+    html += `</select></div>`;
+    html += `<div id="table_${dataKey}">${buildEscalationTable(rows)}</div>`;
+    return html;
 }
 
 function buildEscalationTable(rows) {
@@ -421,6 +441,12 @@ function buildEscalationTable(rows) {
     });
     html += `</table></div>`;
     return html;
+}
+
+function filterEscalation(owner, dataKey) {
+    const allRows = window._escalationData[dataKey];
+    const filtered = owner === 'All' ? allRows : allRows.filter(r => (r['Opportunity Owner'] || 'Unknown') === owner);
+    document.getElementById('table_' + dataKey).innerHTML = buildEscalationTable(filtered);
 }
 
 function switchTab(event, tabId) {
